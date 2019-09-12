@@ -22,8 +22,7 @@ def evaluate(input_model):
     y_pred = input_model.predict(x_test)
     shape = y_pred[:, 2:, :].shape
 
-    ctc_decode_list = K.ctc_decode(y_pred[:, 2:, :], input_length=np.ones(shape[0])*shape[1])[0]
-    ctc_decode = K.ctc_decode(y_pred[:, 2:, :], input_length=np.ones(shape[0])*shape[1])[0][0]
+    ctc_decode = K.ctc_decode(y_pred[:, 2:, :], input_length=np.ones(shape[0]) * shape[1])[0][0]
     out = K.get_value(ctc_decode)[:, :max_length]
 
     for m in np.arange(batch_size):
@@ -38,7 +37,7 @@ def evaluate(input_model):
             print('Text pred:\t{}'.format(text_pred))
             print('Text true:\t{}\n'.format(text_true))
 
-    return correct_prediction/100
+    return correct_prediction / 100
 
 class Evaluate(Callback):
 
@@ -46,19 +45,21 @@ class Evaluate(Callback):
 
         # Вывод точности в конце каждой эпохи
         acc = evaluate(base_model)
-        print('acc:'+str(acc)+"%")
+        print('Accuracy:t\' + str(acc) + "%")
 
 evaluator = Evaluate()
 
 def ctc_lambda_func(args):
+              
     iy_pred, ilabels, iinput_length, ilabel_length = args
     iy_pred = iy_pred[:, 2:, :]
+              
     return K.ctc_batch_cost(ilabels, iy_pred, iinput_length, ilabel_length)
 
 # Построение модели
 inputShape = Input(name='the_input', shape=(img_w, img_h, 1))
 
-# Сверточные, MaxPool-слои и нормализация
+# CNN
 conv_1 = Conv2D(16, (3, 3), activation='relu', padding='same')(inputShape)
 batchnorm_1 = BatchNormalization()(conv_1)
 pool_1 = MaxPooling2D(pool_size=(2, 2))(batchnorm_1)
@@ -69,32 +70,32 @@ batchnorm_2 = BatchNormalization()(conv_3)
 bn_shape = batchnorm_2.get_shape()
 
 # Изменение формы перед подачей на LSTM
-x_reshape = Reshape(target_shape=(int(int(bn_shape[1]) * 2), int(int(bn_shape[2] * bn_shape[3])/2)))(batchnorm_2) # (batch_size, width, height*dim)
+x_reshape = Reshape(target_shape=(int(int(bn_shape[1]) * 2), int(int(bn_shape[2] * bn_shape[3])/2)))(batchnorm_2)
 
 # 1-й полносвязный слой
 fc_1 = Dense(64, activation='relu')(x_reshape)
 
 # Двунаправленные LSTM-слои
-rnn_1 = LSTM(64, kernel_initializer="he_normal", return_sequences=True)(fc_1)
-rnn_1b = LSTM(64, kernel_initializer="he_normal", go_backwards=True, return_sequences=True)(fc_1)
+rnn_1 = LSTM(64, kernel_initializer='he_normal', return_sequences=True)(fc_1)
+rnn_1b = LSTM(64, kernel_initializer='he_normal', go_backwards=True, return_sequences=True)(fc_1)
 rnn1_merged = add([rnn_1, rnn_1b])
-rnn_2 = LSTM(64, kernel_initializer="he_normal", return_sequences=True)(rnn1_merged)
-rnn_2b = LSTM(64, kernel_initializer="he_normal", go_backwards=True, return_sequences=True)(rnn1_merged)
+rnn_2 = LSTM(64, kernel_initializer='he_normal', return_sequences=True)(rnn1_merged)
+rnn_2b = LSTM(64, kernel_initializer='he_normal', go_backwards=True, return_sequences=True)(rnn1_merged)
 rnn2_merged = concatenate([rnn_2, rnn_2b])
 
 # Регуляризация и выходной слой с softmax
 drop_1 = Dropout(0.25)(rnn2_merged)
 fc_2 = Dense(len(letters), kernel_initializer='he_normal', activation='softmax')(drop_1)
 
-# Модель для прелсказания
+# Модель для прелсказаний
 base_model = Model(inputs=[inputShape], outputs=[fc_2])
 
-labels = Input(name='the_labels', shape=[max_length], dtype='float32')
-input_length = Input(name='input_length', shape=[1], dtype='int32')
-label_length = Input(name='label_length', shape=[1], dtype='int32')
+labels = Input(name='the_labels', shape=[max_length], dtype=np.float32)
+input_length = Input(name='input_length', shape=[1], dtype=np.int32)
+label_length = Input(name='label_length', shape=[1], dtype=np.int32)
 
 # Lambda-слой CTC-loss
-loss_out = Lambda(ctc_lambda_func, output_shape=(1,), name='ctc')([fc_2, labels, input_length, label_length])
+loss_out = Lambda(ctc_lambda_func, output_shape=[1], name='ctc')([fc_2, labels, input_length, label_length])
 
 # Модель для обучения
 model = Model(inputs=[inputShape, labels, input_length, label_length], outputs=loss_out)
@@ -105,5 +106,5 @@ model.summary()
 
 plot_model(model, to_file='model.png', show_shapes=True)
 
-model.fit_generator(batch_generator(words), steps_per_epoch=words.size//batch_size, epochs=epochs, verbose=1,  callbacks=[evaluator])
+model.fit_generator(batch_generator(words), steps_per_epoch=words.size // batch_size, epochs=epochs, verbose=1,  callbacks=[evaluator])
 base_model.save('base_model.h5')
