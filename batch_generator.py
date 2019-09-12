@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import cairo
 import matplotlib as mpl
-mpl.use('Qt4Agg')
 import matplotlib.pyplot as plt
 from config import text_path, img_w, img_h, batch_size
 
@@ -89,25 +88,27 @@ words = get_text(text_path)
 max_length = get_max_lenght(words)
 letters = get_letters(words)
 
-def batch_generator(dataset, batch_size = batch_size):
+def batch_generator(dataset, batch_size=batch_size):
 
     epoch = 0
+    i = 0
 
-    for i in np.arange(10000000):
+    while True:
         
         x_data = np.zeros((batch_size, img_h, img_w, 1))
-        y_data = np.zeros((batch_size, max_length), dtype = 'int32')
+        y_data = np.zeros((batch_size, max_length), dtype=np.int32)
         
         for j in np.arange(batch_size) + 1:
 
         	try:
 	            ind = i * batch_size + j - dataset.size * epoch
+		    i += 1
 
 	            if ind >= dataset.size:
 	                epoch += 1
 
 	            # Генерируем зашумленное изображение с текстом, расположенном в случайном месте
-	            img = paint_text(dataset[ind], img_h, img_w, position='random')[:, :, np.newaxis]
+	            img = paint_text(dataset[ind], img_h, img_w, position='random')[:, :, None]
 	            img = add_normal_distr(img, std=30)
 	            text = dataset[ind]
 
@@ -116,7 +117,7 @@ def batch_generator(dataset, batch_size = batch_size):
 	                text += '-'
 
 	            # Преобразуем текст в массив NumPy 
-	            lbl = np.asarray(text_to_labels(letters, text), dtype = np.int32)
+	            lbl = np.asarray(text_to_labels(letters, text), dtype=np.int32)
 
 	            x_data[j - 1, :, :, :] = img
 	            y_data[j - 1, :] = lbl
@@ -126,14 +127,13 @@ def batch_generator(dataset, batch_size = batch_size):
 	                        'label_length': np.ones(batch_size) * max_length}
 	            outputs = {'ctc': np.zeros([batch_size])}
 
-	        except AssertionError:
-	        	continue
-
+	        except ValueError:
+	            break
         yield inputs, outputs
 
 if __name__ == '__main__':
 	
-	test_img = paint_text('figure', 64, 64, position='random', font_size = 16)
+	test_img = paint_text('figure', 64, 64, position='random', font_size=16)
 	test_img = add_normal_distr(test_img, std=30.0)
 	test_img = 255 - test_img
 	plt.imshow(test_img, cmap='gray')
